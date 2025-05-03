@@ -1,0 +1,589 @@
+---
+title: "Market Basket Analysis"
+author: "Giovanni Del Piano"
+date: "2025-04-25"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    theme: default
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align='center', message=FALSE, warning=FALSE)
+```
+
+# **Introduzione**
+
+In questo notebook utilizzeremo l'**algoritmo Apriori** per eseguire una **Market Basket Analysis**. Una 
+Market Basket Analysis è una tecnica utilizzata dai grandi rivenditori per scoprire associazioni tra articoli.  
+Funziona cercando combinazioni di articoli che si verificano frequentemente insieme nelle transazioni, fornendo informazioni utili a comprendere il comportamento di acquisto.  
+Il risultato di questo tipo di analisi è, in termini semplici, un insieme di **regole** che possono essere interpretate come **“se accade questo, allora accade quello”**.  
+Per ulteriori informazioni su questi argomenti, puoi consultare i seguenti link:
+
+* [Market Basket Analysis](https://en.wikipedia.org/wiki/Affinity_analysis)
+
+* [Algoritmo Apriori](https://en.wikipedia.org/wiki/Apriori_algorithm)
+
+* [Apprendimento di regole di associazione](https://en.wikipedia.org/wiki/Association_rule_learning)
+
+Per cominciare, è importante definire l’algoritmo Apriori, includendo alcuni concetti statistici (support, confidence, lift e conviction) per selezionare le regole più interessanti.  
+Successivamente utilizzeremo un dataset contenente più di 6.000 transazioni provenienti da una panetteria per applicare l’algoritmo e scoprire combinazioni di prodotti acquistati insieme.  
+Iniziamo!
+
+# **Regole di associazione**
+
+L’algoritmo Apriori genera regole di associazione per un determinato dataset.  
+Una regola di associazione implica che se un articolo A si verifica, allora anche l’articolo B si verifica con una certa probabilità.  
+Vediamo un esempio:
+
+<center>
+
+| Transaction   | Items                                       | 
+|:--------------|:--------------------------------------------|
+| t1            | {T-shirt, Trousers, Belt}                   | 
+| t2            | {T-shirt, Jacket}                           |   
+| t3            | {Jacket, Gloves}                            |  
+| t4            | {T-shirt, Trousers, Jacket}                 | 
+| t5            | {T-shirt, Trousers, Sneakers, Jacket, Belt} |   
+| t6            | {Trousers, Sneakers, Belt}                  |
+| t7            | {Trousers, Belt, Sneakers}                  | 
+
+</center>   
+
+Nella tabella sopra possiamo vedere sette transazioni provenienti da un negozio di abbigliamento.  
+Ogni transazione mostra gli articoli acquistati. Possiamo rappresentare gli articoli come un **item set** nel modo seguente:
+
+$$I=\{i_1, i_2,..., i_k\}$$
+
+Nel nostro caso corrisponde a:
+
+$$I=\{T\text- shirt, Trousers, Belt, Jacket, Gloves, Sneakers\}$$
+
+Una **transazione** è rappresentata dalla seguente espressione:
+
+$$T=\{t_1, t_2,..., t_n\}$$
+
+Ad esempio,
+
+$$t_1=\{T\text- shirt, Trousers, Belt\}$$
+
+Una **regola di associazione** è quindi definita come un'implicazione nella forma:
+
+<center> $X \Rightarrow Y$, dove $X \subset I$, $Y \subset I$ e $X \cap Y = 0$ </center>
+
+Ad esempio,
+
+$$\{T\text- shirt, Trousers\} \Rightarrow \{Belt\}$$
+
+Nelle sezioni seguenti definiremo quattro metriche per misurare la bontà di una regola.
+
+## Support
+
+Il support indica quanto frequentemente un certo itemset compare nel dataset.
+
+$$supp(X \Rightarrow Y)=\dfrac{|X \cup Y|}{n}$$
+
+In altre parole, è il numero di transazioni che contengono sia $X$ che $Y$ diviso per il numero totale di transazioni.  
+Le regole con un support troppo basso tendono a non essere utili. Vediamo alcuni esempi usando le transazioni del negozio di abbigliamento:
+
+* $supp(T\text- shirt \Rightarrow Trousers)=\dfrac{3}{7}=43\%$
+
+* $supp(Trousers \Rightarrow Belt)=\dfrac{4}{7}=57\%$
+
+* $supp(T\text- shirt \Rightarrow Belt)=\dfrac{2}{7}=28\%$
+
+* $supp(\{T\text- shirt, Trousers\} \Rightarrow \{Belt\})=\dfrac{2}{7}=28\%$
+
+## Confidence
+
+Per una regola $X \Rightarrow Y$, la confidence mostra la percentuale di volte in cui $Y$ è stato acquistato insieme a $X$.  
+È un’indicazione di quanto spesso la regola si è dimostrata vera.
+
+$$conf(X \Rightarrow Y)=\dfrac{supp(X \cup Y)}{supp(X)}$$
+
+Ad esempio, la regola $T\text- shirt \Rightarrow Trousers$ ha confidence 3/4, il che significa che nel 75% delle transazioni contenenti una t-shirt vengono acquistati anche Trousers.  
+Altri esempi:
+
+* $conf(Trousers \Rightarrow Belt)=\dfrac{4/7}{5/7}=80\%$
+
+* $conf(T\text- shirt \Rightarrow Belt)=\dfrac{2/7}{4/7}=50\%$
+
+* $conf(\{T\text- shirt, Trousers\} \Rightarrow \{Belt\})=\dfrac{2/7}{3/7}=66\%$
+
+## Lift
+
+Il lift di una regola è il rapporto tra il support osservato e quello atteso se $X$ e $Y$ fossero indipendenti, ed è definito come:
+
+$$lift(X \Rightarrow Y)=\dfrac{supp(X \cup Y)}{supp(X)supp(Y)}$$
+
+Valori di lift più alti indicano associazioni più forti. Alcuni esempi:
+
+* $lift(T\text- shirt \Rightarrow Trousers)=\dfrac{3/7}{(4/7)(5/7)}=1.05$
+
+* $lift(Trousers \Rightarrow Belt)=\dfrac{4/7}{(5/7)(4/7)}=1.4$
+
+* $lift(T\text- shirt \Rightarrow Belt)=\dfrac{2/7}{(4/7)(4/7)}=0.875$
+
+* $lift(\{T\text- shirt, Trousers\} \Rightarrow \{Belt\})=\dfrac{2/7}{(3/7)(4/7)}=1.17$
+
+## Conviction
+
+La conviction di una regola è definita come:
+
+$$conv(X \Rightarrow Y)=\dfrac{1-supp(Y)}{1-conf(X \Rightarrow Y)}$$
+
+Può essere interpretata come il rapporto tra la frequenza attesa che $X$ si verifichi **senza** $Y$ (se fossero indipendenti), e la frequenza **osservata** delle previsioni sbagliate.  
+Un valore elevato significa che il conseguente ($Y$) dipende fortemente dall’antecedente ($X$). Alcuni esempi:
+
+* $conv(T\text- shirt \Rightarrow Trousers)=\dfrac{1-5/7}{1-3/4}=1.14$
+
+* $conv(Trousers \Rightarrow Belt)=\dfrac{1-4/7}{1-4/5}=2.14$
+
+* $conv(T\text- shirt \Rightarrow Belt)=\dfrac{1-4/7}{1-1/2}=0.86$
+
+* $conv(\{T\text- shirt, Trousers\} \Rightarrow \{Belt\})=\dfrac{1-4/7}{1-2/3}=1.28$
+
+Per ulteriori informazioni su queste misure, consulta [qui](https://en.wikipedia.org/wiki/Association_rule_learning).
+
+## Come funziona passo-passo l'algoritmo Apriori
+
+* Trova tutti gli itemset frequenti singoli (con support ≥ soglia).
+
+* Crea candidati di dimensione 2, 3, …, k combinando quelli frequenti trovati prima.
+
+* Scarta quelli che contengono sottoinsiemi non frequenti.
+
+* Ripeti finché non trovi più itemset candidati con supporto sufficiente.
+
+* Genera regole di associazione da questi itemset frequenti, calcolando confidenza e lift.
+
+## Esempio semplice
+
+Dataset:
+
+T1: {pane, burro, latte}  
+T2: {pane, burro}  
+T3: {burro, latte}  
+T4: {pane, latte}  
+T5: {pane, burro, latte}
+
+Supponiamo:
+
+* Soglia di supporto: 60% (almeno in 3 su 5 transazioni)
+
+1. **Itemset** {pane}, {burro}, {latte} → frequenti.
+
+2. **Combiniamo**: {pane, burro}, {pane, latte}, {burro, latte}
+→ Tutti hanno supporto ≥ 60%.
+
+2. **Combiniamo**: {pane, burro, latte} → presente in T1 e T5 (2/5 = 40%) → scartato.
+
+3. Dalle combinazioni valide generiamo regole:
+
+* {pane}⇒{burro} con confidenza = support({pane, burro}) / support({pane})
+
+✅ Vantaggi
+
+* Intuitivo e facile da implementare.
+
+* Ottimo per piccoli/medi dataset.
+
+❌ Limiti
+
+* Crescita esplosiva di combinazioni con dataset grandi.
+
+* Richiede molte letture del dataset (costoso in termini computazionali).
+
+🛠️ Quando usarlo
+
+* Analisi delle vendite e promozioni mirate.
+
+* Ottimizzazione layout nei supermercati.
+
+* Suggerimenti di acquisto in e-commerce.
+
+
+
+
+# **Caricamento dei dati** {.tabset .tabset-fade .tabset-pills}
+
+Per prima cosa dobbiamo caricare alcune librerie e importare i dati.  
+Possiamo usare la funzione [`read.transactions()`](https://www.rdocumentation.org/packages/arules/versions/1.6-5/topics/read.transactions) del pacchetto [`arules`](https://cran.r-project.org/web/packages/arules/arules.pdf)  
+per creare un oggetto di tipo `transactions`.
+ 
+
+```{r message=FALSE, warning=FALSE}
+# Load libraries
+library(tidyverse) # data manipulation
+library(arules) # mining association rules and frequent itemsets
+library(arulesViz) # visualization techniques for association rules
+library(knitr) # dynamic report generation
+library(gridExtra) # provides a number of user-level functions to work with "grid" graphics
+library(lubridate) # work with dates and times
+
+# Read the data
+trans <- read.transactions("BreadBasket_DMS.csv", format="single", cols=c(3,4), sep=",", rm.duplicates=TRUE)
+```
+
+Mostriamo i dati
+
+## Transaction object
+```{r message=FALSE, warning=FALSE}
+# Transaction object
+trans
+```
+
+## Summary
+```{r message=FALSE, warning=FALSE}
+# Summary
+summary(trans)
+```
+
+## Glimpse
+```{r message=FALSE, warning=FALSE}
+# Glimpse
+glimpse(trans)
+```
+
+## Structure
+```{r message=FALSE, warning=FALSE}
+# Structure
+str(trans)
+```
+
+# **Dizionario dei Dati**
+
+Il dataset contiene 6614 transizioni e le seguenti colonne:
+
+* `Date`. Variabile categorica che indica la data delle transazioni (formato YYYY-MM-DD). La colonna include date dal 30/10/2016 al 09/04/2017.
+
+* `Time`. Variabile categorica che indica l'orario delle transazioni (formato HH:MM:SS).
+
+* `Transaction`. Variabile quantitativa che ci permette di distinguere le transazioni. Le righe che condividono lo stesso valore in questo campo appartengono alla stessa transazione,  
+  ed è per questo che il numero di transazioni è inferiore al numero di osservazioni.
+
+* `Item`. Variabile categorica contenente i prodotti.
+
+# **Analisi Esplorativa dei Dati**
+
+Prima di applicare l'algoritmo Apriori al dataset, mostreremo alcune visualizzazioni per comprendere meglio le transazioni.  
+Ad esempio, possiamo usare la funzione `itemFrequencyPlot()` per creare un grafico a barre della frequenza degli item, al fine di osservare la distribuzione dei prodotti.
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Absolute Item Frequency Plot
+itemFrequencyPlot(trans, topN=15, type="absolute", col="wheat2",xlab="Item name", 
+                  ylab="Frequency (absolute)", main="Absolute Item Frequency Plot")
+```
+ 
+Il [`itemFrequencyPlot()`](https://www.rdocumentation.org/packages/arules/versions/1.6-5/topics/itemFrequencyPlot) ci consente di mostrare le frequenze relative o assolute.
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Relative Item Frequency Plot
+itemFrequencyPlot(trans, topN=15, type="relative", col="lightcyan2", xlab="Item name", 
+                  ylab="Frequency (relative)", main="Relative Item Frequency Plot")
+```
+   
+Il caffè è l'item più venduto seguito da pane e te, mostriamo qualche altra distribuzione per descrivere come si comportano le vendite durante l'arco della giornata.
+[`ggplot()`](https://www.rdocumentation.org/packages/ggplot2/versions/3.3.0/topics/ggplot) function. 
+
+* Transactions per mese
+
+* Transactions per giorno della settimana
+
+* Transactions per ora
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Load data 
+trans_csv <- read.csv("BreadBasket_DMS.csv")
+
+# Visualization - Transactions per month
+trans_csv %>%
+  mutate(Month=as.factor(month(Date))) %>%
+  group_by(Month) %>%
+  summarise(Transactions=n_distinct(Transaction)) %>%
+  ggplot(aes(x=Month, y=Transactions)) +
+  geom_bar(stat="identity", fill="mistyrose2", 
+           show.legend=FALSE, colour="black") +
+  geom_label(aes(label=Transactions)) +
+  labs(title="Transactions per month") +
+  theme_bw() 
+```
+
+ 
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Visualization - Transactions per weekday
+trans_csv %>%
+  mutate(WeekDay=as.factor(weekdays(as.Date(Date)))) %>%
+  group_by(WeekDay) %>%
+  summarise(Transactions=n_distinct(Transaction)) %>%
+  ggplot(aes(x=WeekDay, y=Transactions)) +
+  geom_bar(stat="identity", fill="mistyrose2", 
+           show.legend=FALSE, colour="black") +
+  geom_label(aes(label=Transactions)) +
+  labs(title="Transactions per weekday") +
+  scale_x_discrete(limits = c("lunedì", "martedì", "mercoledì", "giovedì",
+                              "venerdì", "sabato", "domenica")) +
+  theme_bw() 
+ 
+```
+
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Visualization - Transactions per hour
+trans_csv %>%
+  mutate(Hour=as.factor(hour(hms(Time)))) %>%
+  group_by(Hour) %>%
+  summarise(Transactions=n_distinct(Transaction)) %>%
+  ggplot(aes(x=Hour, y=Transactions)) +
+  geom_bar(stat="identity", fill="steelblue1", show.legend=FALSE, colour="black") +
+  geom_label(aes(label=Transactions)) +
+  labs(title="Transactions per hour") +
+  theme_bw()
+```
+
+
+# **Apriori algorithm**
+
+## Scelta dei livelli di support e confidence
+
+Il primo passo per creare un set di regole associative è determinare la soglia per i valori di support e confidence, Se settiamo questi valori troppo in basso, l'algoritmo ci metterà più tempo a girare e finiremo con l'avere moltissime regole, per lo più inutili. Quindi scegliamo più treshold per confrontarle tra loro
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Support and confidence values
+supportLevels <- c(0.1, 0.05, 0.01, 0.005)
+confidenceLevels <- c(0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1)
+
+# Empty integers 
+rules_sup10 <- integer(length=9)
+rules_sup5 <- integer(length=9)
+rules_sup1 <- integer(length=9)
+rules_sup0.5 <- integer(length=9)
+
+# Apriori algorithm with a support level of 10%
+for (i in 1:length(confidenceLevels)) {
+  
+  rules_sup10[i] <- length(apriori(trans, parameter=list(sup=supportLevels[1], 
+                                   conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup5[i] <- length(apriori(trans, parameter=list(sup=supportLevels[2], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 1%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup1[i] <- length(apriori(trans, parameter=list(sup=supportLevels[3], 
+                                  conf=confidenceLevels[i], target="rules")))
+  
+}
+
+# Apriori algorithm with a support level of 0.5%
+for (i in 1:length(confidenceLevels)){
+  
+  rules_sup0.5[i] <- length(apriori(trans, parameter=list(sup=supportLevels[4], 
+                                    conf=confidenceLevels[i], target="rules")))
+  
+}
+```
+
+Nei seguenti grafici osserviamo il numero di regole generate con un support level di 10, 5, 1 e 0.5 percento.
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Number of rules found with a support level of 10%
+plot1 <- qplot(confidenceLevels, rules_sup10, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 10%") +
+  theme_bw()
+
+# Number of rules found with a support level of 5%
+plot2 <- qplot(confidenceLevels, rules_sup5, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 5%") + 
+  scale_y_continuous(breaks=seq(0, 10, 2)) +
+  theme_bw()
+
+# Number of rules found with a support level of 1%
+plot3 <- qplot(confidenceLevels, rules_sup1, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 1%") + 
+  scale_y_continuous(breaks=seq(0, 50, 10)) +
+  theme_bw()
+
+# Number of rules found with a support level of 0.5%
+plot4 <- qplot(confidenceLevels, rules_sup0.5, geom=c("point", "line"), 
+               xlab="Confidence level", ylab="Number of rules found", 
+               main="Apriori with a support level of 0.5%") + 
+  scale_y_continuous(breaks=seq(0, 130, 20)) +
+  theme_bw()
+
+# Subplot
+grid.arrange(plot1, plot2, plot3, plot4, ncol=2)
+```
+  
+Mostriamo i risultati sullo stesso grafico
+
+```{r message=FALSE, warning=FALSE, fig.align='center'}
+# Data frame
+num_rules <- data.frame(rules_sup10, rules_sup5, rules_sup1, rules_sup0.5, confidenceLevels)
+
+# Number of rules found with a support level of 10%, 5%, 1% and 0.5%
+ggplot(data=num_rules, aes(x=confidenceLevels)) +
+  
+  # Plot line and points (support level of 10%)
+  geom_line(aes(y=rules_sup10, colour="Support level of 10%")) + 
+  geom_point(aes(y=rules_sup10, colour="Support level of 10%")) +
+  
+  # Plot line and points (support level of 5%)
+  geom_line(aes(y=rules_sup5, colour="Support level of 5%")) +
+  geom_point(aes(y=rules_sup5, colour="Support level of 5%")) +
+  
+  # Plot line and points (support level of 1%)
+  geom_line(aes(y=rules_sup1, colour="Support level of 1%")) + 
+  geom_point(aes(y=rules_sup1, colour="Support level of 1%")) +
+  
+  # Plot line and points (support level of 0.5%)
+  geom_line(aes(y=rules_sup0.5, colour="Support level of 0.5%")) +
+  geom_point(aes(y=rules_sup0.5, colour="Support level of 0.5%")) +
+  
+  # Labs and theme
+  labs(x="Confidence levels", y="Number of rules found", 
+       title="Apriori algorithm with different support levels") +
+  theme_bw() +
+  theme(legend.title=element_blank())
+```
+  
+Analizziamo i risultati:
+
+* **Livello di support del 10%**. Identifichiamo solo poche regole con livelli di confidence molto bassi. Questo significa che non ci sono associazioni relativamente frequenti nel nostro dataset.  
+  Non possiamo scegliere questo valore, le regole risultanti non sono rappresentative.
+
+* **Livello di support del 5%**. Identifichiamo solo una regola con una confidence di almeno il 50%. Sembra che dobbiamo cercare livelli di support inferiori al 5% per ottenere un numero maggiore  
+  di regole con una confidence ragionevole.
+
+* **Livello di support dell’1%**. Iniziamo a ottenere decine di regole, di cui 13 hanno una confidence di almeno il 50%.
+
+* **Livello di support dello 0.5%**. Troppo elevato il numero di regole da analizzare!
+
+In sintesi, useremo un **livello di support dell’1%** e un **livello di confidence del 50%**.
+
+## Esecuzione
+
+Eseguiamo l’algoritmo Apriori con i valori ottenuti nella sezione precedente.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Apriori algorithm execution with a support level of 1% and a confidence level of 50%
+rules_sup1_conf50 <- apriori(trans, parameter=list(sup=supportLevels[3], 
+                             conf=confidenceLevels[5], target="rules"))
+```
+
+Le regole di associazione sono le seguenti
+
+```{r message=FALSE, warning=FALSE}
+# Inspect association rules
+inspect(rules_sup1_conf50)
+```
+
+Possiamo anche creare una tabella HTML interattiva utilizzando la funzione [`inspectDT()`](https://www.rdocumentation.org/packages/arulesViz/versions/1.3-3/topics/inspectDT) del pacchetto `arulesViz`.  
+Le regole possono essere filtrate e ordinate interattivamente.
+
+Come si interpretano queste regole?
+
+* Il 52% dei clienti che ha acquistato una cioccolata calda ha acquistato anche un caffè.
+
+* Il 63% dei clienti che ha acquistato uno *spanish brunch* ha acquistato anche un caffè.
+
+* Il 73% dei clienti che ha acquistato un toast ha acquistato anche un caffè.
+
+E così via. Sembra che in questa panetteria ci siano molti amanti del caffè!
+
+## Visualizzazione delle regole di associazione
+
+Useremo il pacchetto `arulesViz` per creare le visualizzazioni.
+La seguente visualizzazione mostra le regole sottoforma di grafo con gli item ai vertici e le regole
+rappresentate da i vertici connessi agli item con gli archi.
+
+```{r  message=FALSE, warning=FALSE}
+# Graph (default layout)
+plot(rules_sup1_conf50, method="graph", shading="lift", control = list(
+    edges = ggraph::geom_edge_link(
+      end_cap = ggraph::circle(4, "mm"),
+      start_cap = ggraph::circle(4, "mm"),
+      color = "black",
+      arrow = arrow(length = unit(2, "mm"), angle = 20, type = "closed"),
+      alpha = .2
+    ),
+    nodes = ggraph::geom_node_point(aes_string(size = "support", color = "lift")),
+    nodetext = ggraph::geom_node_label(aes_string(label = "label"), alpha = .8, repel = TRUE)
+  ),
+  limit = 10
+  ) + 
+  scale_color_gradient(low = "blue", high = "red") + 
+  scale_size(range = c(2, 10)) 
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Graph (circular layout)
+plot(rules_sup1_conf50, method = "graph", control = list(layout = "in_circle",
+      edges = ggraph::geom_edge_link(
+      end_cap = ggraph::circle(4, "mm"),
+      start_cap = ggraph::circle(4, "mm"),
+      color = "black",
+      arrow = arrow(length = unit(2, "mm"), angle = 20, type = "closed"),
+      alpha = .2
+    ),
+    nodes = ggraph::geom_node_point(aes_string(size = "support", color = "lift")),
+    nodetext = ggraph::geom_node_label(aes_string(label = "label"), alpha = .8, repel = TRUE)
+  ),
+  limit = 10
+  ) + 
+  scale_color_gradient(low = "blue", high = "red") + 
+  scale_size(range = c(2, 10)) 
+```
+
+
+# **Esercizi**
+
+In questa sezione puoi mettere alla prova i concetti appresi durante questo kernel rispondendo al seguente questionario. Buona fortuna!
+
+* Fai un esempio in cui si può applicare l'algoritmo Apriori.
+
+* Calcola il support della regola $Trousers \Rightarrow Jacket$ utilizzando le transazioni del negozio di abbigliamento. Interpreta il risultato.
+
+* Calcola la confidence della regola $T\text- shirt \Rightarrow Jacket$ utilizzando le transazioni del negozio di abbigliamento. Interpreta il risultato.
+
+* Calcola il lift della regola $Trousers \Rightarrow Sneakers$ utilizzando le transazioni del negozio di abbigliamento. Interpreta il risultato.
+
+* Calcola la conviction della regola $T\text- shirt \Rightarrow Belt$ utilizzando le transazioni del negozio di abbigliamento. Interpreta il risultato.
+
+* Calcola le quattro metriche (support, confidence, lift e conviction) della regola $\{T\text- shirt, Trousers\} \Rightarrow \{Jacket\}$ utilizzando le transazioni del negozio di abbigliamento. Interpreta i risultati.
+
+* Cosa succede quando si diminuisce il livello di support? Perché?
+
+* Cosa succede quando si aumenta il livello di confidence? Perché?
+
+* Quante regole vengono generate con un livello di support dello 0.5% e un livello di confidence del 20%? (puoi usare le visualizzazioni precedenti)
+
+* Utilizzando il dataset precedente, esegui l'algoritmo Apriori con un support del 5% e una confidence del 10%. Le regole ottenute sono interessanti? Perché?
+
+* Quali raccomandazioni daresti al proprietario della panetteria?
+
+Hai superato il test?
+
+# **Conclusioni**
+
+In questo kernel abbiamo imparato a conoscere l'algoritmo Apriori, uno degli algoritmi più utilizzati nel data mining. Abbiamo rivisto alcuni concetti statistici  
+(support, confidence, lift e conviction) per selezionare regole interessanti, abbiamo scelto i valori appropriati per eseguire l'algoritmo e infine visualizzato le regole di associazione risultanti.
